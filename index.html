@@ -1,49 +1,110 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>WebAR with Rotation and Zoom</title>
+    <title>WebAR with Gesture</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <script src="https://unpkg.com/aframe-gesture-detector/dist/aframe-gesture-detector.min.js"></script>
+
+    <script>
+      // Gesture Detector Component for Rotation & Scale
+      AFRAME.registerComponent('gesture-detector', {
+        schema: { sensitivity: { default: 0.5 }, zoomSpeed: { default: 0.01 } },
+        init: function () {
+          this.isDragging = false;
+          this.startX = 0;
+          this.startY = 0;
+          this.startRotation = { x: 0, y: 0 };
+          this.startScale = this.el.object3D.scale.x;
+
+          // Mouse Events (Rotation)
+          this.el.sceneEl.addEventListener('mousedown', (e) => this.onStart(e));
+          this.el.sceneEl.addEventListener('mousemove', (e) => this.onMove(e));
+          this.el.sceneEl.addEventListener('mouseup', () => this.onEnd());
+
+          // Touch Events (Rotation & Pinch-Zoom)
+          this.el.sceneEl.addEventListener('touchstart', (e) => this.onTouchStart(e));
+          this.el.sceneEl.addEventListener('touchmove', (e) => this.onTouchMove(e));
+          this.el.sceneEl.addEventListener('touchend', () => this.onEnd());
+
+          // Mouse Wheel (Zoom)
+          this.el.sceneEl.addEventListener('wheel', (e) => this.onZoom(e));
+        },
+
+        onStart: function (event) {
+          this.isDragging = true;
+          this.startX = event.screenX;
+          this.startY = event.screenY;
+          const currentRotation = this.el.getAttribute('rotation');
+          this.startRotation = { x: currentRotation.x, y: currentRotation.y };
+        },
+
+        onMove: function (event) {
+          if (!this.isDragging) return;
+          const deltaX = event.screenX - this.startX;
+          const deltaY = event.screenY - this.startY;
+          const newRotation = {
+            x: this.startRotation.x - deltaY * this.data.sensitivity,
+            y: this.startRotation.y + deltaX * this.data.sensitivity
+          };
+          this.el.setAttribute('rotation', newRotation);
+        },
+
+        onTouchStart: function (event) {
+          if (event.touches.length === 2) {
+            this.startDistance = this.getDistance(event.touches);
+            this.startScale = this.el.object3D.scale.x;
+          } else {
+            this.onStart(event.touches[0]);
+          }
+        },
+
+        onTouchMove: function (event) {
+          if (event.touches.length === 2) {
+            const newDistance = this.getDistance(event.touches);
+            const scaleFactor = newDistance / this.startDistance;
+            let newScale = this.startScale * scaleFactor;
+            newScale = Math.min(Math.max(newScale, 0.05), 2); // limit
+            this.el.object3D.scale.set(newScale, newScale, newScale);
+          } else {
+            this.onMove(event.touches[0]);
+          }
+        },
+
+        onZoom: function (event) {
+          let scale = this.el.object3D.scale.x;
+          let newScale = scale + (-event.deltaY * this.data.zoomSpeed);
+          newScale = Math.min(Math.max(newScale, 0.05), 2);
+          this.el.object3D.scale.set(newScale, newScale, newScale);
+        },
+
+        getDistance: function (touches) {
+          const dx = touches[0].clientX - touches[1].clientX;
+          const dy = touches[0].clientY - touches[1].clientY;
+          return Math.sqrt(dx*dx + dy*dy);
+        },
+
+        onEnd: function () {
+          this.isDragging = false;
+        }
+      });
+    </script>
   </head>
 
   <body style="margin:0; overflow:hidden;">
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-      
-      <!-- Pattern marker: Hiro -->
+      <!-- Hiro marker -->
       <a-marker preset="hiro">
-        <a-entity 
-          id="model"
-          gltf-model="femalemodelwithlabel(final).glb"  <!-- your 3D model -->
-          scale="0.01 0.01 0.01"
-          position="0 0 0"
-          gesture-detector
-        ></a-entity>
+        <a-entity id="model"
+                  gltf-model="femalemodel.glb"
+                  scale="0.1 0.1 0.1"
+                  position="0 0 0"
+                  rotation="0 0 0"
+                  gesture-detector>
+        </a-entity>
       </a-marker>
 
       <a-entity camera></a-entity>
     </a-scene>
-
-    <script>
-      const model = document.querySelector('#model');
-      let rotationY = 0;
-
-      // Rotate with one finger / mouse drag
-      model.addEventListener('onefingermove', (evt) => {
-        const movementX = evt.detail.positionChange.x;
-        rotationY += movementX * 0.5; // adjust rotation speed
-        model.object3D.rotation.y = THREE.MathUtils.degToRad(rotationY);
-      });
-
-      // Scale with pinch (zoom in/out)
-      model.addEventListener('twofingermove', (evt) => {
-        const scaleChange = evt.detail.spreadChange / 200; // adjust zoom speed
-        model.object3D.scale.x = Math.max(0.01, model.object3D.scale.x + scaleChange);
-        model.object3D.scale.y = Math.max(0.01, model.object3D.scale.y + scaleChange);
-        model.object3D.scale.z = Math.max(0.01, model.object3D.scale.z + scaleChange);
-      });
-    </script>
   </body>
 </html>
-
